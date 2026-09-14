@@ -20,6 +20,7 @@ const emptySettings = (): GenerationSettings & { updated_at?: string | null } =>
   max_subscription_bytes: 5000000,
   urltest: { url: '', interval: '', tolerance: 150 },
   dns_urltest: { enabled: false, keywords: [], url: '', interval: '', tolerance: 150 },
+  manual_selector: { enabled: false, keywords: [] },
   updated_at: null
 });
 
@@ -29,6 +30,7 @@ export function useGenerationSettingsManager(hooks: Hooks = {}) {
   const settings = ref(emptySettings());
   const keywordText = ref<Record<RegionCode, string>>({ HK: '', TW: '', SG: '', JP: '', US: '' });
   const dnsKeywordText = ref('');
+  const manualSelectorKeywordText = ref('');
 
   const applySettings = (next: GenerationSettings & { updated_at?: string | null }) => {
     settings.value = next;
@@ -37,6 +39,7 @@ export function useGenerationSettingsManager(hooks: Hooks = {}) {
       (next.region_keywords[region] || []).join('\n')
     ])) as Record<RegionCode, string>;
     dnsKeywordText.value = (next.dns_urltest.keywords || []).join('\n');
+    manualSelectorKeywordText.value = (next.manual_selector.keywords || []).join('\n');
   };
 
   const refresh = async () => {
@@ -76,6 +79,14 @@ export function useGenerationSettingsManager(hooks: Hooks = {}) {
     dnsKeywordText.value = value;
   };
 
+  const updateManualSelectorEnabled = (enabled: boolean) => {
+    settings.value = { ...settings.value, manual_selector: { ...settings.value.manual_selector, enabled } };
+  };
+
+  const updateManualSelectorKeyword = (value: string) => {
+    manualSelectorKeywordText.value = value;
+  };
+
   const save = async () => {
     if (hooks.ensureAuthed && !(await hooks.ensureAuthed())) return;
     saving.value = true;
@@ -89,6 +100,10 @@ export function useGenerationSettingsManager(hooks: Hooks = {}) {
         dns_urltest: {
           ...settings.value.dns_urltest,
           keywords: dnsKeywordText.value.split(/\n|,/).map((item) => item.trim()).filter(Boolean)
+        },
+        manual_selector: {
+          ...settings.value.manual_selector,
+          keywords: manualSelectorKeywordText.value.split(/\n|,/).map((item) => item.trim()).filter(Boolean)
         }
       };
       applySettings(await updateGenerationSettings(payload));
@@ -104,6 +119,7 @@ export function useGenerationSettingsManager(hooks: Hooks = {}) {
     settings.value = emptySettings();
     keywordText.value = { HK: '', TW: '', SG: '', JP: '', US: '' };
     dnsKeywordText.value = '';
+    manualSelectorKeywordText.value = '';
   };
 
   return {
@@ -113,12 +129,15 @@ export function useGenerationSettingsManager(hooks: Hooks = {}) {
     settings,
     keywordText,
     dnsKeywordText,
+    manualSelectorKeywordText,
     refresh,
     updateKeyword,
     updateSetting,
     updateUrltest,
     updateDnsUrltest,
     updateDnsKeyword,
+    updateManualSelectorEnabled,
+    updateManualSelectorKeyword,
     save,
     reset
   };

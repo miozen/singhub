@@ -154,12 +154,15 @@
           :settings="generationSettings"
           :keyword-text="generationKeywordText"
           :dns-keyword-text="dnsKeywordText"
+          :manual-selector-keyword-text="manualSelectorKeywordText"
           @save="saveGenerationSettings"
           @update-keyword="updateGenerationKeyword"
           @update-setting="updateGenerationSetting"
           @update-urltest="updateGenerationUrltest"
           @update-dns-urltest="updateDnsUrltest"
           @update-dns-keyword="updateDnsKeyword"
+          @update-manual-selector-enabled="updateManualSelectorEnabled"
+          @update-manual-selector-keyword="updateManualSelectorKeyword"
         />
       </section>
     </section>
@@ -377,12 +380,15 @@ const {
   settings: generationSettings,
   keywordText: generationKeywordText,
   dnsKeywordText,
+  manualSelectorKeywordText,
   refresh: refreshGenerationSettings,
   updateKeyword: updateGenerationKeyword,
   updateSetting: updateGenerationSetting,
   updateUrltest: updateGenerationUrltest,
   updateDnsUrltest,
   updateDnsKeyword,
+  updateManualSelectorEnabled,
+  updateManualSelectorKeyword,
   save: saveGenerationSettings
 } = settingsManager;
 
@@ -625,15 +631,17 @@ nav button.active { box-shadow: inset 3px 0 var(--cyan); }
 .qr-preview img { display: block; width: min(300px, 100%); height: auto; image-rendering: pixelated; }
 
 .settings-section { display: grid; gap: 12px; padding: 14px; }
-.region-settings { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
 .settings-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
 .settings-form.compact { grid-template-columns: minmax(240px, 1fr) repeat(2, minmax(120px, 180px)); }
-.region-settings label, .settings-form label { display: grid; gap: 8px; margin: 0; }
-.region-settings span, .settings-form span { color: var(--muted); font-size: 13px; }
-.region-settings textarea, .settings-form input, .binding-row textarea {
+.keyword-rows { display: grid; gap: 10px; }
+.keyword-rows label { display: grid; grid-template-columns: 110px minmax(0, 1fr); align-items: center; gap: 12px; margin: 0; }
+.settings-form label, .keyword-rows label { display: grid; gap: 8px; margin: 0; }
+.settings-form span, .keyword-rows span { color: var(--muted); font-size: 13px; }
+.settings-form textarea, .settings-form input, .keyword-rows textarea, .binding-row textarea {
   width: 100%; border: 1px solid var(--line); border-radius: 8px; background: #07101a; color: var(--text); padding: 10px 12px; outline: none;
 }
-.region-settings textarea { resize: vertical; min-height: 96px; }
+.keyword-rows textarea { resize: vertical; min-height: 62px; }
+.full-width { grid-column: 1 / -1; }
 
 .modal-backdrop { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 20px; background: #000b; }
 .modal { width: min(520px, 100%); max-height: min(88vh, 880px); overflow: auto; padding: 22px; border: 1px solid var(--line); border-radius: 12px; background: #0b1420; display: grid; gap: 14px; }
@@ -668,6 +676,7 @@ nav button.active { box-shadow: inset 3px 0 var(--cyan); }
   .panel-editor { min-height: 680px; }
   .editor-toolbar { grid-template-columns: minmax(140px, 190px) minmax(150px, 210px) minmax(320px, 1fr); }
   .settings-form.compact { grid-template-columns: 1fr; }
+  .keyword-rows label { grid-template-columns: 1fr; gap: 6px; }
 }
 @media (max-width: 760px) {
   .auth-shell { grid-template-columns: 1fr; gap: 28px; padding: 24px; justify-items: stretch; }

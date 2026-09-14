@@ -1,7 +1,7 @@
 import type { ClientProfileRecord, GenerationSettings, SubscriptionRecord } from '../../shared/src/types';
 import { REGIONS } from '../../shared/src/validators';
 import { readSubscription } from './subscriptions';
-import { DNS_OUTBOUND_TAG, readGenerationSettings } from './settings';
+import { DNS_OUTBOUND_TAG, MANUAL_SELECTOR_OUTBOUND_TAG, readGenerationSettings } from './settings';
 
 const STRUCTURAL_TYPES = new Set(['selector', 'urltest', 'direct', 'block', 'dns']);
 const FLAGS: Record<string, string> = { HK: '🇭🇰', SG: '🇸🇬', JP: '🇯🇵', US: '🇺🇸', TW: '🇹🇼' };
@@ -32,7 +32,7 @@ function clone<T>(value: T): T {
   return typeof structuredClone === 'function' ? structuredClone(value) : JSON.parse(JSON.stringify(value));
 }
 
-function validateTemplate(config: any, options: { skipDnsDetourValidation?: boolean } = {}) {
+function validateTemplate(config: any, options: { skipDnsDetourValidation?: boolean; allowedMissingOutboundTags?: string[] } = {}) {
   if (!config || typeof config !== 'object' || !Array.isArray(config.outbounds)) throw new Error('template_outbounds_required');
   const tags = new Set<string>();
   for (const outbound of config.outbounds) {
@@ -43,7 +43,7 @@ function validateTemplate(config: any, options: { skipDnsDetourValidation?: bool
   const missing: string[] = [];
   for (const outbound of config.outbounds) {
     for (const tag of outbound.outbounds || []) {
-      if (!tags.has(tag)) missing.push(`outbound:${outbound.tag}->${tag}`);
+      if (!tags.has(tag) && !options.allowedMissingOutboundTags?.includes(tag)) missing.push(`outbound:${outbound.tag}->${tag}`);
     }
   }
   if (!options.skipDnsDetourValidation) {
@@ -137,6 +137,21 @@ function buildDnsUrltestGroup(nodes: NodeLike[], settings: GenerationSettings) {
   };
 }
 
+function buildManualSelectorGroup(nodes: NodeLike[], settings: GenerationSettings) {
+  if (!settings.manual_selector.enabled || !settings.manual_selector.keywords.length) return null;
+  const keywords = settings.manual_selector.keywords.map((keyword) => keyword.toUpperCase());
+  const outbounds = nodes
+    .filter((node) => keywords.some((keyword) => String(node.tag || '').toUpperCase().includes(keyword)))
+    .map((node) => node.tag);
+  if (!outbounds.length) return null;
+  return {
+    type: 'selector',
+    tag: MANUAL_SELECTOR_OUTBOUND_TAG,
+    outbounds,
+    interrupt_exist_connections: true
+  };
+}
+
 function cleanReferences(config: any) {
   const valid = new Set((config.outbounds || []).map((outbound: NodeLike) => outbound.tag));
   for (const outbound of config.outbounds || []) {
@@ -147,18 +162,31 @@ function cleanReferences(config: any) {
   }
 }
 
-function injectTemplate(template: any, nodes: NodeLike[], groups: NodeLike[], byRegion: Record<string, string[]>, directTag: string, settings: GenerationSettings, dnsGroup: NodeLike | null) {
+function injectTemplate(template: any, nodes: NodeLike[], groups: NodeLike[], byRegion: Record<string, string[]>, directTag: string, settings: GenerationSettings, dnsGroup: NodeLike | null, manualSelectorGroup: NodeLike | null) {
   const config = clone(template);
+  const requiresManualSelector = config.outbounds.some((outbound: NodeLike) =>
+    outbound.type === 'selector' && Array.isArray(outbound.outbounds) && outbound.outbounds.includes(MANUAL_SELECTOR_OUTBOUND_TAG)
+  );
   if (dnsGroup && config.outbounds.some((outbound: NodeLike) => outbound.tag === DNS_OUTBOUND_TAG)) {
     throw new Error(`dns_outbound_tag_conflict:${DNS_OUTBOUND_TAG}`);
   }
   if (dnsGroup && nodes.some((node) => node.tag === DNS_OUTBOUND_TAG)) {
     throw new Error(`dns_node_tag_conflict:${DNS_OUTBOUND_TAG}`);
   }
+  if (manualSelectorGroup && config.outbounds.some((outbound: NodeLike) => outbound.tag === MANUAL_SELECTOR_OUTBOUND_TAG)) {
+    throw new Error(`manual_selector_outbound_tag_conflict:${MANUAL_SELECTOR_OUTBOUND_TAG}`);
+  }
+  if (manualSelectorGroup && nodes.some((node) => node.tag === MANUAL_SELECTOR_OUTBOUND_TAG)) {
+    throw new Error(`manual_selector_node_tag_conflict:${MANUAL_SELECTOR_OUTBOUND_TAG}`);
+  }
+  if (requiresManualSelector && !manualSelectorGroup) {
+    throw new Error(`manual_selector_required_but_unavailable:${MANUAL_SELECTOR_OUTBOUND_TAG}`);
+  }
   const allRegionalTags = Object.values(byRegion).flat();
   const keywords = Object.values(settings.region_keywords).flat();
   config.outbounds = config.outbounds.map((outbound: NodeLike) => {
     if (outbound.type !== 'selector') return outbound;
+    const includesManualSelector = Array.isArray(outbound.outbounds) && outbound.outbounds.includes(MANUAL_SELECTOR_OUTBOUND_TAG);
     const rule = parseRule(outbound.x_rule);
     delete outbound.x_rule;
     if (rule?.mode === 'keep') return outbound;
@@ -179,6 +207,7 @@ function injectTemplate(template: any, nodes: NodeLike[], groups: NodeLike[], by
       selected = [...allRegionalTags, ...unmatched];
     } else if (rule.mode === 'all_regions') selected.push(...allRegionalTags);
     else selected.push(...(rule.includeDirect ? [directTag] : []), ...rule.regions.flatMap((region) => byRegion[region] || []));
+    if (includesManualSelector) selected.push(MANUAL_SELECTOR_OUTBOUND_TAG);
     outbound.outbounds = [...new Set(selected)];
     return outbound;
   });
@@ -189,7 +218,7 @@ function injectTemplate(template: any, nodes: NodeLike[], groups: NodeLike[], by
   for (const server of routedDnsServers) {
     server.detour = dnsGroup ? DNS_OUTBOUND_TAG : '🗽 节点选择';
   }
-  config.outbounds.push(...groups, ...(dnsGroup ? [dnsGroup] : []), ...nodes);
+  config.outbounds.push(...groups, ...(dnsGroup ? [dnsGroup] : []), ...(manualSelectorGroup ? [manualSelectorGroup] : []), ...nodes);
   cleanReferences(config);
   validateTemplate(config);
   return config;
@@ -292,7 +321,7 @@ export async function generateClientConfig(db: D1Database, profile: ClientProfil
   let template: any;
   try {
     template = JSON.parse(rawTemplate);
-    validateTemplate(template, { skipDnsDetourValidation: true });
+    validateTemplate(template, { skipDnsDetourValidation: true, allowedMissingOutboundTags: [MANUAL_SELECTOR_OUTBOUND_TAG] });
   } catch (error) {
     addStep('模板来源', 'error', `客户端绑定模板无效：${error instanceof Error ? error.message : 'template_invalid'}`);
     abort(error instanceof Error ? error.message : 'template_invalid');
@@ -305,7 +334,8 @@ export async function generateClientConfig(db: D1Database, profile: ClientProfil
       max_subscription_bytes: settings.max_subscription_bytes,
       banned_pattern: settings.banned_pattern,
       urltest: settings.urltest,
-      dns_urltest: settings.dns_urltest
+      dns_urltest: settings.dns_urltest,
+      manual_selector: settings.manual_selector
     }
   });
   addStep('系统设置', 'success', '已读取当前生成设置。', {
@@ -313,7 +343,8 @@ export async function generateClientConfig(db: D1Database, profile: ClientProfil
     max_subscription_bytes: settings.max_subscription_bytes,
     banned_pattern: settings.banned_pattern,
     urltest: settings.urltest,
-    dns_urltest: settings.dns_urltest
+    dns_urltest: settings.dns_urltest,
+    manual_selector: settings.manual_selector
   });
   addStep('模板来源', 'success', '已读取客户端绑定模板。', { template_id: profile.template_id, template_name: profile.template_name || profile.template_id });
 
@@ -374,6 +405,7 @@ export async function generateClientConfig(db: D1Database, profile: ClientProfil
   });
 
   const dnsGroup = buildDnsUrltestGroup(nodes, settings);
+  const manualSelectorGroup = buildManualSelectorGroup(nodes, settings);
   const dnsDetourCount = (template.dns?.servers || []).filter((server: NodeLike) => Boolean(server.detour)).length;
   if (!settings.dns_urltest.enabled) {
     addStep('DNS 专用分组', 'warning', `DNS 专用节点组未启用，${dnsDetourCount} 个 DNS detour 已回退到 🗽 节点选择。`, {
@@ -394,11 +426,25 @@ export async function generateClientConfig(db: D1Database, profile: ClientProfil
     });
   }
 
+  if (!settings.manual_selector.enabled) {
+    addStep('手动选择组', 'warning', '🍭 手动选择组未启用。');
+  } else if (!settings.manual_selector.keywords.length) {
+    addStep('手动选择组', 'warning', '🍭 手动选择组未配置筛选关键词。');
+  } else if (!manualSelectorGroup) {
+    addStep('手动选择组', 'warning', '没有匹配手动选择关键词的节点。', { keywords: settings.manual_selector.keywords });
+  } else {
+    addStep('手动选择组', 'success', `生成 ${MANUAL_SELECTOR_OUTBOUND_TAG}，包含 ${manualSelectorGroup.outbounds.length} 个节点。`, {
+      tag: MANUAL_SELECTOR_OUTBOUND_TAG,
+      nodes: manualSelectorGroup.outbounds.length,
+      keywords: settings.manual_selector.keywords
+    });
+  }
+
   const selectorCount = template.outbounds.filter((outbound: NodeLike) => outbound.type === 'selector').length;
   const directTag = template.outbounds.find((outbound: NodeLike) => outbound.type === 'direct')?.tag || '🎯 全球直连';
   let output: Record<string, any>;
   try {
-    output = injectTemplate(template, nodes, groups, byRegion, directTag, settings, dnsGroup);
+    output = injectTemplate(template, nodes, groups, byRegion, directTag, settings, dnsGroup, manualSelectorGroup);
   } catch (error) {
     addStep('策略注入', 'error', `策略注入失败：${error instanceof Error ? error.message : 'inject_failed'}`, { selectors: selectorCount });
     abort(error instanceof Error ? error.message : 'inject_failed');
@@ -421,6 +467,7 @@ export async function generateClientConfig(db: D1Database, profile: ClientProfil
       nodes: nodes.length,
       groups: groups.length,
       dns_group_nodes: dnsGroup?.outbounds.length || 0,
+      manual_selector_nodes: manualSelectorGroup?.outbounds.length || 0,
       dns_detours_adjusted: dnsDetourCount,
       selectors: selectorCount,
       outbounds: output.outbounds.length,
@@ -431,7 +478,8 @@ export async function generateClientConfig(db: D1Database, profile: ClientProfil
         max_subscription_bytes: settings.max_subscription_bytes,
         banned_pattern: settings.banned_pattern,
         urltest: settings.urltest,
-        dns_urltest: settings.dns_urltest
+        dns_urltest: settings.dns_urltest,
+        manual_selector: settings.manual_selector
       }
     },
     steps

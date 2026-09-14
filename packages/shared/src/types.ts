@@ -116,6 +116,10 @@ export type GenerationSettings = {
     interval: string;
     tolerance: number;
   };
+  manual_selector: {
+    enabled: boolean;
+    keywords: string[];
+  };
 };
 
 export type GenerationSettingsPayload = GenerationSettings;

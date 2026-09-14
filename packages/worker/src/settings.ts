@@ -3,6 +3,7 @@ import { REGIONS, isSafeHttpUrl } from '../../shared/src/validators';
 
 const GENERATION_SETTINGS_KEY = 'generation';
 export const DNS_OUTBOUND_TAG = '📡 dns-out';
+export const MANUAL_SELECTOR_OUTBOUND_TAG = '🍭 手动选择';
 
 export const DEFAULT_GENERATION_SETTINGS: GenerationSettings = {
   region_keywords: {
@@ -27,6 +28,10 @@ export const DEFAULT_GENERATION_SETTINGS: GenerationSettings = {
     url: 'https://www.gstatic.com/generate_204',
     interval: '3m',
     tolerance: 150
+  },
+  manual_selector: {
+    enabled: false,
+    keywords: []
   }
 };
 
@@ -55,6 +60,14 @@ function uniqueStrings(value: unknown, fallback: string[], limit = 30) {
     .filter((item) => item && !seen.has(item) && seen.add(item))
     .slice(0, limit);
   return result.length ? result : fallback;
+}
+
+function optionalUniqueStrings(value: unknown, limit = 30) {
+  const seen = new Set<string>();
+  return (Array.isArray(value) ? value : [])
+    .map((item) => String(item || '').trim())
+    .filter((item) => item && !seen.has(item) && seen.add(item))
+    .slice(0, limit);
 }
 
 function boundedInteger(value: unknown, fallback: number, min: number, max: number) {
@@ -101,6 +114,10 @@ export function normalizeGenerationSettings(input: Partial<GenerationSettingsPay
       url: isSafeHttpUrl(dnsUrl) ? dnsUrl : DEFAULT_GENERATION_SETTINGS.dns_urltest.url,
       interval: dnsInterval.slice(0, 20) || DEFAULT_GENERATION_SETTINGS.dns_urltest.interval,
       tolerance: boundedInteger(input.dns_urltest?.tolerance, DEFAULT_GENERATION_SETTINGS.dns_urltest.tolerance, 0, 5000)
+    },
+    manual_selector: {
+      enabled: input.manual_selector?.enabled === true,
+      keywords: optionalUniqueStrings(input.manual_selector?.keywords)
     }
   };
 }
