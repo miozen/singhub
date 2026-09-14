@@ -12,6 +12,16 @@ type Hooks = {
 
 const regions: RegionCode[] = ['HK', 'TW', 'SG', 'JP', 'US'];
 
+function formatKeywords(keywords: string[]) {
+  return keywords.map((keyword) => /\s/.test(keyword) ? `"${keyword}"` : keyword).join(' ');
+}
+
+function parseKeywords(value: string) {
+  return (value.match(/"[^"]*"|'[^']*'|[^\s,]+/g) || [])
+    .map((item) => (/^(".*"|'.*')$/.test(item) ? item.slice(1, -1) : item).trim())
+    .filter(Boolean);
+}
+
 const emptySettings = (): GenerationSettings & { updated_at?: string | null } => ({
   region_keywords: { HK: [], TW: [], SG: [], JP: [], US: [] },
   banned_pattern: '',
@@ -36,10 +46,10 @@ export function useGenerationSettingsManager(hooks: Hooks = {}) {
     settings.value = next;
     keywordText.value = Object.fromEntries(regions.map((region) => [
       region,
-      (next.region_keywords[region] || []).join('\n')
+      formatKeywords(next.region_keywords[region] || [])
     ])) as Record<RegionCode, string>;
-    dnsKeywordText.value = (next.dns_urltest.keywords || []).join('\n');
-    manualSelectorKeywordText.value = (next.manual_selector.keywords || []).join('\n');
+    dnsKeywordText.value = formatKeywords(next.dns_urltest.keywords || []);
+    manualSelectorKeywordText.value = formatKeywords(next.manual_selector.keywords || []);
   };
 
   const refresh = async () => {
@@ -95,15 +105,15 @@ export function useGenerationSettingsManager(hooks: Hooks = {}) {
         ...settings.value,
         region_keywords: Object.fromEntries(regions.map((region) => [
           region,
-          keywordText.value[region].split(/\n|,/).map((item) => item.trim()).filter(Boolean)
+          parseKeywords(keywordText.value[region])
         ])) as Record<RegionCode, string[]>,
         dns_urltest: {
           ...settings.value.dns_urltest,
-          keywords: dnsKeywordText.value.split(/\n|,/).map((item) => item.trim()).filter(Boolean)
+          keywords: parseKeywords(dnsKeywordText.value)
         },
         manual_selector: {
           ...settings.value.manual_selector,
-          keywords: manualSelectorKeywordText.value.split(/\n|,/).map((item) => item.trim()).filter(Boolean)
+          keywords: parseKeywords(manualSelectorKeywordText.value)
         }
       };
       applySettings(await updateGenerationSettings(payload));

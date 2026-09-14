@@ -633,14 +633,16 @@ nav button.active { box-shadow: inset 3px 0 var(--cyan); }
 .settings-section { display: grid; gap: 12px; padding: 14px; }
 .settings-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
 .settings-form.compact { grid-template-columns: minmax(240px, 1fr) repeat(2, minmax(120px, 180px)); }
-.keyword-rows { display: grid; gap: 10px; }
+.keyword-rows { display: grid; gap: 8px; }
 .keyword-rows label { display: grid; grid-template-columns: 110px minmax(0, 1fr); align-items: center; gap: 12px; margin: 0; }
 .settings-form label, .keyword-rows label { display: grid; gap: 8px; margin: 0; }
 .settings-form span, .keyword-rows span { color: var(--muted); font-size: 13px; }
-.settings-form textarea, .settings-form input, .keyword-rows textarea, .binding-row textarea {
+.settings-form textarea, .settings-form input, .keyword-rows textarea, .keyword-rows input, .binding-row textarea {
   width: 100%; border: 1px solid var(--line); border-radius: 8px; background: #07101a; color: var(--text); padding: 10px 12px; outline: none;
 }
-.keyword-rows textarea { resize: vertical; min-height: 62px; }
+.settings-form .check-row { display: flex; align-items: center; gap: 8px; }
+.settings-form .check-row input { width: 16px; height: 16px; margin: 0; padding: 0; flex: 0 0 auto; }
+.settings-form .check-row span { line-height: 16px; }
 .full-width { grid-column: 1 / -1; }
 
 .modal-backdrop { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 20px; background: #000b; }

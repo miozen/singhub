@@ -41,7 +41,7 @@
           <div class="keyword-rows">
             <label v-for="region in regions" :key="region">
               <span>{{ regionLabels[region] }}</span>
-              <textarea :value="keywordText[region]" rows="2" spellcheck="false" @input="emitText('update-keyword', region, $event)"></textarea>
+              <input :value="keywordText[region]" spellcheck="false" placeholder="空格或逗号分隔；词内空格请加引号" @input="emitText('update-keyword', region, $event)" />
             </label>
           </div>
           <div class="settings-form compact">
@@ -72,7 +72,7 @@
             </label>
             <label class="full-width">
               <span>节点筛选关键词</span>
-              <textarea :value="manualSelectorKeywordText" rows="3" spellcheck="false" @input="emitManualSelectorKeywords"></textarea>
+              <input :value="manualSelectorKeywordText" spellcheck="false" placeholder="空格或逗号分隔；词内空格请加引号" @input="emitManualSelectorKeywords" />
             </label>
           </div>
         </section>
@@ -89,7 +89,7 @@
             </label>
             <label class="full-width">
               <span>节点筛选关键词</span>
-              <textarea :value="dnsKeywordText" rows="3" spellcheck="false" @input="emitDnsKeywords"></textarea>
+              <input :value="dnsKeywordText" spellcheck="false" placeholder="空格或逗号分隔；词内空格请加引号" @input="emitDnsKeywords" />
             </label>
             <label>
               <span>测速 URL</span>
