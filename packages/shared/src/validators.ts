@@ -1,5 +1,4 @@
 export const TEMPLATE_ID_RE = /^[a-zA-Z0-9_-]+$/;
-export const REGIONS = ['HK', 'TW', 'SG', 'JP', 'US'] as const;
 
 export function isValidTemplateId(id: unknown): id is string {
   return typeof id === 'string' && TEMPLATE_ID_RE.test(id);
@@ -25,8 +24,10 @@ export function isSafeHttpUrl(value: unknown): value is string {
 }
 
 export function cleanRegions(value: unknown) {
-  const allowed = new Set<string>(REGIONS);
-  return [...new Set((Array.isArray(value) ? value : []).filter((item) => allowed.has(item)))];
+  const seen = new Set<string>();
+  return (Array.isArray(value) ? value : [])
+    .map((item) => String(item || '').trim().toUpperCase())
+    .filter((item) => /^[A-Z0-9_-]{2,16}$/.test(item) && !seen.has(item) && seen.add(item));
 }
 export function isValidJsonObjectString(value: unknown) {
   if (value === undefined || value === null || value === '') return true;

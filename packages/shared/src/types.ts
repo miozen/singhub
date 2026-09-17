@@ -18,14 +18,14 @@ export type TemplateVersionRecord = {
   created_at?: string;
 };
 
-export type RegionCode = 'HK' | 'TW' | 'SG' | 'JP' | 'US';
+export type RegionDefinition = { id: string; name: string; emoji: string; enabled: boolean; keywords: string[] };
 
 export type SubscriptionRecord = {
   id: string;
   name: string;
   url: string;
   enabled: boolean;
-  allowed_regions: RegionCode[];
+  allowed_regions: string[];
   created_at?: string;
   updated_at?: string;
 };
@@ -34,7 +34,7 @@ export type SubscriptionPayload = {
   name: string;
   url: string;
   enabled?: boolean;
-  allowed_regions: RegionCode[];
+  allowed_regions: string[];
 };
 
 export type SubscriptionTestReport = {
@@ -99,7 +99,7 @@ export type GenerationTestResult = {
 
 
 export type GenerationSettings = {
-  region_keywords: Record<RegionCode, string[]>;
+  regions: RegionDefinition[];
   banned_pattern: string;
   subscription_user_agent: string;
   fetch_timeout_ms: number;

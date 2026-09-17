@@ -1,5 +1,5 @@
 import { ref } from 'vue';
-import type { GenerationSettings, RegionCode } from '@shared/types';
+import type { GenerationSettings } from '@shared/types';
 import { fetchGenerationSettings, updateGenerationSettings } from '../api/settings';
 
 type ToastType = 'success' | 'error' | 'info';
@@ -10,7 +10,6 @@ type Hooks = {
   ensureAuthed?: () => Promise<boolean>;
 };
 
-const regions: RegionCode[] = ['HK', 'TW', 'SG', 'JP', 'US'];
 
 function formatKeywords(keywords: string[]) {
   return keywords.map((keyword) => /\s/.test(keyword) ? `"${keyword}"` : keyword).join(' ');
@@ -23,7 +22,7 @@ function parseKeywords(value: string) {
 }
 
 const emptySettings = (): GenerationSettings & { updated_at?: string | null } => ({
-  region_keywords: { HK: [], TW: [], SG: [], JP: [], US: [] },
+  regions: [],
   banned_pattern: '',
   subscription_user_agent: '',
   fetch_timeout_ms: 10000,
@@ -38,16 +37,13 @@ export function useGenerationSettingsManager(hooks: Hooks = {}) {
   const loading = ref(false);
   const saving = ref(false);
   const settings = ref(emptySettings());
-  const keywordText = ref<Record<RegionCode, string>>({ HK: '', TW: '', SG: '', JP: '', US: '' });
+  const keywordText = ref<Record<string, string>>({});
   const dnsKeywordText = ref('');
   const manualSelectorKeywordText = ref('');
 
   const applySettings = (next: GenerationSettings & { updated_at?: string | null }) => {
     settings.value = next;
-    keywordText.value = Object.fromEntries(regions.map((region) => [
-      region,
-      formatKeywords(next.region_keywords[region] || [])
-    ])) as Record<RegionCode, string>;
+    keywordText.value = Object.fromEntries(next.regions.map((region) => [region.id, formatKeywords(region.keywords)]));
     dnsKeywordText.value = formatKeywords(next.dns_urltest.keywords || []);
     manualSelectorKeywordText.value = formatKeywords(next.manual_selector.keywords || []);
   };
@@ -63,8 +59,27 @@ export function useGenerationSettingsManager(hooks: Hooks = {}) {
     }
   };
 
-  const updateKeyword = (region: RegionCode, value: string) => {
+  const updateKeyword = (region: string, value: string) => {
     keywordText.value = { ...keywordText.value, [region]: value };
+  };
+
+  const addRegion = () => {
+    const id = window.prompt('区域 ID（2-16 位大写字母、数字、_ 或 -；创建后不可修改）', '')?.trim().toUpperCase() || '';
+    if (!/^[A-Z0-9_-]{2,16}$/.test(id) || settings.value.regions.some((region) => region.id === id)) {
+      hooks.notify?.('区域 ID 无效或已存在', 'error');
+      return;
+    }
+    settings.value = { ...settings.value, regions: [...settings.value.regions, { id, name: id, emoji: '🌐', enabled: true, keywords: [] }] };
+    keywordText.value = { ...keywordText.value, [id]: '' };
+  };
+  const removeRegion = (id: string) => {
+    if (!window.confirm(`删除区域 ${id}？若订阅或模板仍引用它，保存将被服务器拒绝。`)) return;
+    settings.value = { ...settings.value, regions: settings.value.regions.filter((region) => region.id !== id) };
+    const { [id]: _removed, ...remaining } = keywordText.value;
+    keywordText.value = remaining;
+  };
+  const updateRegion = (id: string, key: 'name' | 'emoji' | 'enabled', value: string | boolean) => {
+    settings.value = { ...settings.value, regions: settings.value.regions.map((region) => region.id === id ? { ...region, [key]: value } : region) };
   };
 
   const updateSetting = (key: 'banned_pattern' | 'subscription_user_agent' | 'fetch_timeout_ms' | 'max_subscription_bytes', value: string | number) => {
@@ -103,10 +118,7 @@ export function useGenerationSettingsManager(hooks: Hooks = {}) {
     try {
       const payload: GenerationSettings = {
         ...settings.value,
-        region_keywords: Object.fromEntries(regions.map((region) => [
-          region,
-          parseKeywords(keywordText.value[region])
-        ])) as Record<RegionCode, string[]>,
+        regions: settings.value.regions.map((region) => ({ ...region, keywords: parseKeywords(keywordText.value[region.id] || '') })),
         dns_urltest: {
           ...settings.value.dns_urltest,
           keywords: parseKeywords(dnsKeywordText.value)
@@ -127,13 +139,12 @@ export function useGenerationSettingsManager(hooks: Hooks = {}) {
 
   const reset = () => {
     settings.value = emptySettings();
-    keywordText.value = { HK: '', TW: '', SG: '', JP: '', US: '' };
+    keywordText.value = {};
     dnsKeywordText.value = '';
     manualSelectorKeywordText.value = '';
   };
 
   return {
-    regions,
     loading,
     saving,
     settings,
@@ -142,6 +153,9 @@ export function useGenerationSettingsManager(hooks: Hooks = {}) {
     manualSelectorKeywordText,
     refresh,
     updateKeyword,
+    addRegion,
+    removeRegion,
+    updateRegion,
     updateSetting,
     updateUrltest,
     updateDnsUrltest,

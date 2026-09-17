@@ -1,15 +1,8 @@
-import type { SubscriptionPayload, SubscriptionTestReport } from '../../shared/src/types';
-import { cleanRegions, REGIONS } from '../../shared/src/validators';
+import type { RegionDefinition, SubscriptionPayload, SubscriptionTestReport } from '../../shared/src/types';
+import { cleanRegions } from '../../shared/src/validators';
 import { getSubscriptionById, getSubscriptionList, type SubscriptionRow } from './db';
 
 const STRUCTURAL_TYPES = new Set(['selector', 'urltest', 'direct', 'block', 'dns']);
-const DEFAULT_REGION_KEYWORDS: Record<string, string[]> = {
-  HK: ['HK', 'HKG', 'Hong Kong', '香港', '港'],
-  TW: ['TW', 'TWN', 'Taiwan', '台湾', '台灣', '台'],
-  SG: ['SG', 'SGP', 'Singapore', '新加坡', '狮城', '獅城'],
-  JP: ['JP', 'JPN', 'Japan', '日本', '东京', '東京'],
-  US: ['US', 'USA', 'United States', 'America', '美国', '美國', '洛杉矶', '洛杉磯']
-};
 const DEFAULT_BANNED_PATTERN = '过期|剩余|网址';
 
 function toBase64Url(bytes: Uint8Array) {
@@ -163,15 +156,16 @@ function normalizeNodes(payload: any) {
   });
 }
 
-function countRegions(nodes: any[], allowedRegions: string[]) {
-  const regions = Object.fromEntries(REGIONS.map((region) => [region, 0]));
+function countRegions(nodes: any[], allowedRegions: string[], definitions: RegionDefinition[]) {
+  const active = definitions.filter((region) => region.enabled);
+  const regions = Object.fromEntries(active.map((region) => [region.id, 0]));
   let unmatched = 0;
   for (const node of nodes) {
     const tag = String(node?.tag || '').toUpperCase();
-    const matched = REGIONS.some((region) => {
-      if (allowedRegions.length && !allowedRegions.includes(region)) return false;
-      const hit = DEFAULT_REGION_KEYWORDS[region].some((keyword) => tag.includes(String(keyword).toUpperCase()));
-      if (hit) regions[region] += 1;
+    const matched = active.some((region) => {
+      if (allowedRegions.length && !allowedRegions.includes(region.id)) return false;
+      const hit = region.keywords.some((keyword) => tag.includes(String(keyword).toUpperCase()));
+      if (hit) regions[region.id] += 1;
       return hit;
     });
     if (!matched) unmatched += 1;
@@ -220,7 +214,7 @@ function withCacheBust(url: string) {
   return parsed.toString();
 }
 
-export async function testSubscription(subscription: Partial<SubscriptionPayload> & { id?: string }): Promise<SubscriptionTestReport> {
+export async function testSubscription(subscription: Partial<SubscriptionPayload> & { id?: string }, regions: RegionDefinition[] = []): Promise<SubscriptionTestReport> {
   const startedAt = Date.now();
   const name = String(subscription?.name || '').trim() || '未命名订阅';
   try {
@@ -237,7 +231,7 @@ export async function testSubscription(subscription: Partial<SubscriptionPayload
       duration_ms: Date.now() - startedAt,
       raw_nodes: rawCount,
       valid_nodes: nodes.length,
-      regions: countRegions(nodes, cleanRegions(subscription?.allowed_regions)),
+      regions: countRegions(nodes, cleanRegions(subscription?.allowed_regions), regions),
       warnings: nodes.length ? [] : ['没有可用节点。']
     };
   } catch (error) {

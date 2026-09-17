@@ -1,5 +1,5 @@
 import { computed, ref } from 'vue';
-import type { RegionCode, SubscriptionPayload, SubscriptionRecord, SubscriptionTestReport } from '@shared/types';
+import type { SubscriptionPayload, SubscriptionRecord, SubscriptionTestReport } from '@shared/types';
 import {
   createSubscription,
   deleteSubscription,
@@ -10,7 +10,7 @@ import {
   updateSubscription
 } from '../api/subscriptions';
 
-const DEFAULT_REGIONS: RegionCode[] = ['HK', 'TW', 'SG', 'JP', 'US'];
+const DEFAULT_REGIONS = ['HK', 'TW', 'SG', 'JP', 'US'];
 type ToastType = 'success' | 'error' | 'info';
 
 type Hooks = {
@@ -19,11 +19,11 @@ type Hooks = {
   ensureAuthed?: () => Promise<boolean>;
 };
 
-const emptyForm = (): SubscriptionPayload & { id?: string } => ({
+const emptyForm = (allowedRegions = DEFAULT_REGIONS): SubscriptionPayload & { id?: string } => ({
   name: '',
   url: '',
   enabled: true,
-  allowed_regions: [...DEFAULT_REGIONS]
+  allowed_regions: [...allowedRegions]
 });
 
 export function useSubscriptionManager(hooks: Hooks = {}) {
@@ -60,8 +60,8 @@ export function useSubscriptionManager(hooks: Hooks = {}) {
     }
   };
 
-  const openCreate = () => {
-    form.value = emptyForm();
+  const openCreate = (allowedRegions?: string[]) => {
+    form.value = emptyForm(allowedRegions);
     draftReport.value = null;
     modalOpen.value = true;
   };
@@ -182,7 +182,7 @@ export function useSubscriptionManager(hooks: Hooks = {}) {
     reports.value = { ...reports.value, [subscription.id]: { ...report, expanded: !report.expanded } };
   };
 
-  const updateAllowedRegions = (regions: RegionCode[]) => {
+  const updateAllowedRegions = (regions: string[]) => {
     form.value.allowed_regions = regions;
   };
 

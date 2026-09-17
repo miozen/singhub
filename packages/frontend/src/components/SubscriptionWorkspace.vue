@@ -54,7 +54,7 @@
           <SubscriptionTestReport
             v-if="reports[sub.id]?.expanded"
             :report="reports[sub.id]"
-            :regions="regions"
+            :regions="regions.map((region) => region.id)"
             :tested-at="reports[sub.id].tested_at"
           />
         </article>
@@ -83,13 +83,13 @@
 
         <fieldset>
           <legend>允许区域</legend>
-          <label v-for="region in regions" :key="region" class="check-row">
-            <input v-model="form.allowed_regions" type="checkbox" :value="region" />
-            <span>{{ region }}</span>
+          <label v-for="region in regions" :key="region.id" class="check-row">
+            <input v-model="form.allowed_regions" type="checkbox" :value="region.id" />
+            <span>{{ region.emoji }} {{ region.id }} · {{ region.name }}</span>
           </label>
         </fieldset>
 
-        <SubscriptionTestReport v-if="draftReport" :report="draftReport" :regions="regions" />
+        <SubscriptionTestReport v-if="draftReport" :report="draftReport" :regions="regions.map((region) => region.id)" />
 
         <div class="modal-actions">
           <button type="button" class="ghost" :disabled="testingDraft || saving" @click="$emit('test-draft')">
@@ -105,7 +105,7 @@
 </template>
 
 <script setup lang="ts">
-import type { RegionCode, SubscriptionPayload, SubscriptionRecord, SubscriptionTestReport as SubscriptionTestReportData } from '@shared/types';
+import type { RegionDefinition, SubscriptionPayload, SubscriptionRecord, SubscriptionTestReport as SubscriptionTestReportData } from '@shared/types';
 import SubscriptionTestReport from './SubscriptionTestReport.vue';
 
 type SavedReport = SubscriptionTestReportData & { tested_at: string; expanded: boolean };
@@ -113,7 +113,7 @@ type SubscriptionForm = SubscriptionPayload & { id?: string };
 
 defineProps<{
   subscriptions: SubscriptionRecord[];
-  regions: RegionCode[];
+  regions: RegionDefinition[];
   loading: boolean;
   saving: boolean;
   testingDraft: boolean;

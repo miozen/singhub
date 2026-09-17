@@ -124,7 +124,7 @@
         <SubscriptionWorkspace
           v-if="currentPage === 'subscriptions'"
           :subscriptions="subscriptions"
-          :regions="regions"
+          :regions="generationSettings.regions.filter((region) => region.enabled)"
           :loading="subscriptionsLoading"
           :saving="subscriptionSaving"
           :testing-draft="testingDraftSubscription"
@@ -148,7 +148,6 @@
 
         <SettingsWorkspace
           v-if="currentPage === 'settings'"
-          :regions="settingsRegions"
           :loading="settingsLoading"
           :saving="settingsSaving"
           :settings="generationSettings"
@@ -157,6 +156,9 @@
           :manual-selector-keyword-text="manualSelectorKeywordText"
           @save="saveGenerationSettings"
           @update-keyword="updateGenerationKeyword"
+          @add-region="addGenerationRegion"
+          @remove-region="removeGenerationRegion"
+          @update-region="updateGenerationRegion"
           @update-setting="updateGenerationSetting"
           @update-urltest="updateGenerationUrltest"
           @update-dns-urltest="updateDnsUrltest"
@@ -302,7 +304,6 @@ const subscriptionManager = useSubscriptionManager({
 });
 
 const {
-  regions,
   subscriptions,
   loading: subscriptionsLoading,
   saving: subscriptionSaving,
@@ -315,7 +316,7 @@ const {
   togglingIds: togglingSubscriptionIds,
   deletingId: deletingSubscriptionId,
   refreshList: refreshSubscriptionList,
-  openCreate: openCreateSubscription,
+  openCreate: openCreateSubscriptionBase,
   openEdit: openEditSubscription,
   closeModal: closeSubscriptionModal,
   save: saveSubscription,
@@ -374,7 +375,6 @@ const settingsManager = useGenerationSettingsManager({
 });
 
 const {
-  regions: settingsRegions,
   loading: settingsLoading,
   saving: settingsSaving,
   settings: generationSettings,
@@ -383,6 +383,9 @@ const {
   manualSelectorKeywordText,
   refresh: refreshGenerationSettings,
   updateKeyword: updateGenerationKeyword,
+  addRegion: addGenerationRegion,
+  removeRegion: removeGenerationRegion,
+  updateRegion: updateGenerationRegion,
   updateSetting: updateGenerationSetting,
   updateUrltest: updateGenerationUrltest,
   updateDnsUrltest,
@@ -391,6 +394,8 @@ const {
   updateManualSelectorKeyword,
   save: saveGenerationSettings
 } = settingsManager;
+
+const openCreateSubscription = () => openCreateSubscriptionBase(generationSettings.value.regions.filter((region) => region.enabled).map((region) => region.id));
 
 const openCreateClient = async () => {
   if (!templates.value.length) await refreshList({ autoLoadFirst: false });
@@ -634,6 +639,8 @@ nav button.active { box-shadow: inset 3px 0 var(--cyan); }
 .settings-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
 .settings-form.compact { grid-template-columns: minmax(240px, 1fr) repeat(2, minmax(120px, 180px)); }
 .keyword-rows { display: grid; gap: 8px; }
+.region-row { display: grid; grid-template-columns: 80px 52px 110px minmax(180px, 1fr) auto auto; gap: 8px; align-items: center; }
+.region-row .region-id { opacity: .7; }
 .keyword-rows label { display: grid; grid-template-columns: 110px minmax(0, 1fr); align-items: center; gap: 12px; margin: 0; }
 .settings-form label, .keyword-rows label { display: grid; gap: 8px; margin: 0; }
 .settings-form span, .keyword-rows span { color: var(--muted); font-size: 13px; }

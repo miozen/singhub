@@ -1,18 +1,19 @@
-import type { GenerationSettings, GenerationSettingsPayload, RegionCode } from '../../shared/src/types';
-import { REGIONS, isSafeHttpUrl } from '../../shared/src/validators';
+import type { GenerationSettings, GenerationSettingsPayload, RegionDefinition } from '../../shared/src/types';
+import { isSafeHttpUrl } from '../../shared/src/validators';
 
 const GENERATION_SETTINGS_KEY = 'generation';
 export const DNS_OUTBOUND_TAG = '📡 dns-out';
 export const MANUAL_SELECTOR_OUTBOUND_TAG = '🍭 手动选择';
+const DEFAULT_REGIONS: RegionDefinition[] = [
+  { id: 'HK', name: '香港', emoji: '🇭🇰', enabled: true, keywords: ['HK', 'HKG', 'Hong Kong', '香港', '港'] },
+  { id: 'TW', name: '台湾', emoji: '🇹🇼', enabled: true, keywords: ['TW', 'TWN', 'Taiwan', '台湾', '台灣', '台'] },
+  { id: 'SG', name: '新加坡', emoji: '🇸🇬', enabled: true, keywords: ['SG', 'SGP', 'Singapore', '新加坡', '狮城', '獅城'] },
+  { id: 'JP', name: '日本', emoji: '🇯🇵', enabled: true, keywords: ['JP', 'JPN', 'Japan', '日本', '东京', '東京'] },
+  { id: 'US', name: '美国', emoji: '🇺🇸', enabled: true, keywords: ['US', 'USA', 'United States', 'America', '美国', '美國', '洛杉矶', '洛杉磯'] }
+];
 
 export const DEFAULT_GENERATION_SETTINGS: GenerationSettings = {
-  region_keywords: {
-    HK: ['HK', 'HKG', 'Hong Kong', '香港', '港'],
-    TW: ['TW', 'TWN', 'Taiwan', '台湾', '台灣', '台'],
-    SG: ['SG', 'SGP', 'Singapore', '新加坡', '狮城', '獅城'],
-    JP: ['JP', 'JPN', 'Japan', '日本', '东京', '東京'],
-    US: ['US', 'USA', 'United States', 'America', '美国', '美國', '洛杉矶', '洛杉磯']
-  },
+  regions: DEFAULT_REGIONS,
   banned_pattern: '过期|剩余|网址',
   subscription_user_agent: 'Mozilla/5.0 (Clash)',
   fetch_timeout_ms: 10000,
@@ -86,11 +87,21 @@ function normalizePattern(value: unknown) {
   }
 }
 
+function normalizeRegions(input: any): RegionDefinition[] {
+  const legacy = (input as any)?.region_keywords;
+  const source = Array.isArray(input?.regions) ? input.regions : DEFAULT_REGIONS.map((region) => ({ ...region, keywords: legacy?.[region.id] || region.keywords }));
+  const seen = new Set<string>();
+  return source.slice(0, 30).flatMap((item: any) => {
+    const id = String(item?.id || '').trim().toUpperCase();
+    if (!/^[A-Z0-9_-]{2,16}$/.test(id) || seen.has(id)) return [];
+    seen.add(id);
+    const fallback = DEFAULT_REGIONS.find((region) => region.id === id);
+    return [{ id, name: String(item?.name || fallback?.name || id).trim().slice(0, 40) || id, emoji: String(item?.emoji || fallback?.emoji || '🌐').trim().slice(0, 8) || '🌐', enabled: item?.enabled !== false, keywords: uniqueStrings(item?.keywords, fallback?.keywords || [], 30) }];
+  });
+}
+
 export function normalizeGenerationSettings(input: Partial<GenerationSettingsPayload> = {}): GenerationSettings {
-  const regionKeywords = Object.fromEntries(REGIONS.map((region) => [
-    region,
-    uniqueStrings(input.region_keywords?.[region as RegionCode], DEFAULT_GENERATION_SETTINGS.region_keywords[region as RegionCode])
-  ])) as Record<RegionCode, string[]>;
+  const regions = normalizeRegions(input);
   const url = String(input.urltest?.url || DEFAULT_GENERATION_SETTINGS.urltest.url).trim();
   const interval = String(input.urltest?.interval || DEFAULT_GENERATION_SETTINGS.urltest.interval).trim();
   const dnsUrl = String(input.dns_urltest?.url || DEFAULT_GENERATION_SETTINGS.dns_urltest.url).trim();
@@ -98,7 +109,7 @@ export function normalizeGenerationSettings(input: Partial<GenerationSettingsPay
   const userAgent = String(input.subscription_user_agent || DEFAULT_GENERATION_SETTINGS.subscription_user_agent).trim();
 
   return {
-    region_keywords: regionKeywords,
+    regions,
     banned_pattern: normalizePattern(input.banned_pattern),
     subscription_user_agent: userAgent.slice(0, 160) || DEFAULT_GENERATION_SETTINGS.subscription_user_agent,
     fetch_timeout_ms: boundedInteger(input.fetch_timeout_ms, DEFAULT_GENERATION_SETTINGS.fetch_timeout_ms, 1000, 60000),

@@ -1,10 +1,8 @@
 import type { ClientProfileRecord, GenerationSettings, SubscriptionRecord } from '../../shared/src/types';
-import { REGIONS } from '../../shared/src/validators';
 import { readSubscription } from './subscriptions';
 import { DNS_OUTBOUND_TAG, MANUAL_SELECTOR_OUTBOUND_TAG, readGenerationSettings } from './settings';
 
 const STRUCTURAL_TYPES = new Set(['selector', 'urltest', 'direct', 'block', 'dns']);
-const FLAGS: Record<string, string> = { HK: '🇭🇰', SG: '🇸🇬', JP: '🇯🇵', US: '🇺🇸', TW: '🇹🇼' };
 
 type StepStatus = 'success' | 'warning' | 'error';
 type GenerationStep = { name: string; status: StepStatus; message: string; details?: Record<string, unknown> };
@@ -89,13 +87,14 @@ function normalizeNodes(payload: any, settings: GenerationSettings) {
 }
 
 function countRegions(nodes: NodeLike[], allowedRegions: string[], settings: GenerationSettings) {
-  const regions = Object.fromEntries(REGIONS.map((region) => [region, 0]));
+  const activeRegions = settings.regions.filter((region) => region.enabled);
+  const regions = Object.fromEntries(activeRegions.map((region) => [region.id, 0]));
   let unmatched = 0;
   for (const node of nodes) {
     const tag = String(node?.tag || '').toUpperCase();
-    const matched = REGIONS.some((region) => {
-      if (allowedRegions.length && !allowedRegions.includes(region)) return false;
-      const hit = settings.region_keywords[region].some((keyword) => tag.includes(String(keyword).toUpperCase()));
+    const matched = activeRegions.some((region) => {
+      if (allowedRegions.length && !allowedRegions.includes(region.id)) return false;
+      const hit = region.keywords.some((keyword) => tag.includes(String(keyword).toUpperCase()));
       if (hit) regions[region] += 1;
       return hit;
     });
@@ -106,15 +105,16 @@ function countRegions(nodes: NodeLike[], allowedRegions: string[], settings: Gen
 
 function buildRegionalGroups(sources: Source[], settings: GenerationSettings) {
   const groups: NodeLike[] = [];
-  const byRegion: Record<string, string[]> = Object.fromEntries(REGIONS.map((region) => [region, []]));
-  for (const source of sources) for (const region of source.allowed_regions) {
+  const activeRegions = settings.regions.filter((region) => region.enabled);
+  const byRegion: Record<string, string[]> = Object.fromEntries(activeRegions.map((region) => [region.id, []]));
+  for (const source of sources) for (const region of activeRegions.filter((region) => source.allowed_regions.includes(region.id))) {
     const tags = source.nodes
-      .filter((node) => settings.region_keywords[region]?.some((keyword) => String(node.tag || '').toUpperCase().includes(String(keyword).toUpperCase())))
+      .filter((node) => activeRegions.find((candidate) => candidate.keywords.some((keyword) => String(node.tag || '').toUpperCase().includes(String(keyword).toUpperCase())))?.id === region.id)
       .map((node) => node.tag);
     if (!tags.length) continue;
-    const tag = `${FLAGS[region] || ''} ${region}-${source.name}`.trim();
+    const tag = `${region.emoji} ${region.id}-${source.name}`.trim();
     groups.push({ type: 'urltest', tag, outbounds: tags, ...settings.urltest, interrupt_exist_connections: true });
-    byRegion[region].push(tag);
+    byRegion[region.id].push(tag);
   }
   return { groups, byRegion };
 }
@@ -183,7 +183,7 @@ function injectTemplate(template: any, nodes: NodeLike[], groups: NodeLike[], by
     throw new Error(`manual_selector_required_but_unavailable:${MANUAL_SELECTOR_OUTBOUND_TAG}`);
   }
   const allRegionalTags = Object.values(byRegion).flat();
-  const keywords = Object.values(settings.region_keywords).flat();
+  const keywords = settings.regions.filter((region) => region.enabled).flatMap((region) => region.keywords);
   config.outbounds = config.outbounds.map((outbound: NodeLike) => {
     if (outbound.type !== 'selector') return outbound;
     const includesManualSelector = Array.isArray(outbound.outbounds) && outbound.outbounds.includes(MANUAL_SELECTOR_OUTBOUND_TAG);
@@ -400,7 +400,7 @@ export async function generateClientConfig(db: D1Database, profile: ClientProfil
   Object.assign(progress, { groups: groups.length });
   addStep('区域分组', 'success', `生成 ${groups.length} 个 urltest 分组。`, {
     total: groups.length,
-    regions: Object.fromEntries(REGIONS.map((region) => [region, byRegion[region]?.length || 0])),
+    regions: Object.fromEntries(settings.regions.filter((region) => region.enabled).map((region) => [region.id, byRegion[region.id]?.length || 0])),
     urltest: settings.urltest
   });
 

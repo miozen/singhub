@@ -218,7 +218,7 @@ app.delete('/api/subscriptions/:id', requireAdminAuth, async (c) => {
 app.post('/api/subscriptions/:id/test', requireAdminAuth, async (c) => {
   const item = await readSubscription(c.env.SINGBOX_DB, c.req.param('id'), c.env.TOKEN_SECRET);
   if (!item) return jsonError('Not found', 404, 'NOT_FOUND');
-  return c.json(await testSubscription(item));
+  return c.json(await testSubscription(item, (await readGenerationSettings(c.env.SINGBOX_DB)).regions));
 });
 
 app.post('/api/subscription/test', requireAdminAuth, async (c) => {
@@ -231,7 +231,7 @@ app.post('/api/subscription/test', requireAdminAuth, async (c) => {
     url: subscription.url,
     enabled: subscription.enabled ?? true,
     allowed_regions: cleanRegions(subscription.allowed_regions) as any
-  }));
+  }, (await readGenerationSettings(c.env.SINGBOX_DB)).regions));
 });
 
 
@@ -242,6 +242,19 @@ app.get('/api/settings/generation', requireAdminAuth, async (c) => {
 app.put('/api/settings/generation', requireAdminAuth, async (c) => {
   const body = await c.req.json().catch(() => null);
   if (!body || typeof body !== 'object') return jsonError('Missing request body');
+  const current = await readGenerationSettings(c.env.SINGBOX_DB);
+  const nextIds = new Set(Array.isArray((body as any).regions) ? (body as any).regions.map((region: any) => String(region?.id || '').trim().toUpperCase()) : current.regions.map((region) => region.id));
+  const removed = current.regions.map((region) => region.id).filter((id) => !nextIds.has(id));
+  if (removed.length) {
+    const subscriptions = await listSubscriptions(c.env.SINGBOX_DB, c.env.TOKEN_SECRET);
+    const subscriptionRefs = subscriptions.filter((subscription) => subscription.allowed_regions.some((id) => removed.includes(id))).map((subscription) => subscription.name);
+    const templateRefs: string[] = [];
+    for (const item of (await listTemplates(c.env.SINGBOX_DB))) {
+      const template = await readTemplate(c.env.SINGBOX_DB, item.id);
+      if (template && removed.some((id) => new RegExp(`(?:region|region\\+direct):[^\"']*\\b${id}\\b`).test(template.raw_config))) templateRefs.push(item.name);
+    }
+    if (subscriptionRefs.length || templateRefs.length) return jsonError(`无法删除区域 ${removed.join(', ')}：订阅引用 ${subscriptionRefs.join('、') || '无'}；模板引用 ${templateRefs.join('、') || '无'}。请先停用或移除引用。`, 409, 'REGION_IN_USE');
+  }
   return c.json(await updateGenerationSettings(c.env.SINGBOX_DB, body));
 });
 

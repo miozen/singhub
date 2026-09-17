@@ -22,11 +22,11 @@
 </template>
 
 <script setup lang="ts">
-import type { RegionCode, SubscriptionTestReport } from '@shared/types';
+import type { SubscriptionTestReport } from '@shared/types';
 
 defineProps<{
   report: SubscriptionTestReport;
-  regions: RegionCode[];
+  regions: string[];
   testedAt?: string;
 }>();
 

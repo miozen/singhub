@@ -39,10 +39,15 @@
             <h4>区域识别关键词和测速分组参数</h4>
           </div>
           <div class="keyword-rows">
-            <label v-for="region in regions" :key="region">
-              <span>{{ regionLabels[region] }}</span>
-              <input :value="keywordText[region]" spellcheck="false" placeholder="空格或逗号分隔；词内空格请加引号" @input="emitText('update-keyword', region, $event)" />
-            </label>
+            <div v-for="region in settings.regions" :key="region.id" class="region-row">
+              <input class="region-id" :value="region.id" disabled title="区域 ID 创建后不可修改" />
+              <input :value="region.emoji" maxlength="8" @input="emitRegion(region.id, 'emoji', $event)" />
+              <input :value="region.name" maxlength="40" @input="emitRegion(region.id, 'name', $event)" />
+              <input :value="keywordText[region.id]" spellcheck="false" placeholder="空格或逗号分隔；词内空格请加引号" @input="emitText('update-keyword', region.id, $event)" />
+              <label class="check-row"><input :checked="region.enabled" type="checkbox" @change="emitRegionEnabled(region.id, $event)" /><span>启用</span></label>
+              <button class="ghost" type="button" @click="$emit('remove-region', region.id)">删除</button>
+            </div>
+            <button class="ghost" type="button" @click="$emit('add-region')">新增区域</button>
           </div>
           <div class="settings-form compact">
             <label>
@@ -111,21 +116,23 @@
 </template>
 
 <script setup lang="ts">
-import type { GenerationSettings, RegionCode } from '@shared/types';
+import type { GenerationSettings } from '@shared/types';
 
 defineProps<{
-  regions: RegionCode[];
   loading: boolean;
   saving: boolean;
   settings: GenerationSettings & { updated_at?: string | null };
-  keywordText: Record<RegionCode, string>;
+  keywordText: Record<string, string>;
   dnsKeywordText: string;
   manualSelectorKeywordText: string;
 }>();
 
 const emit = defineEmits<{
   save: [];
-  'update-keyword': [region: RegionCode, value: string];
+  'update-keyword': [region: string, value: string];
+  'add-region': [];
+  'remove-region': [id: string];
+  'update-region': [id: string, key: 'name' | 'emoji' | 'enabled', value: string | boolean];
   'update-setting': [key: 'banned_pattern' | 'subscription_user_agent' | 'fetch_timeout_ms' | 'max_subscription_bytes', value: string | number];
   'update-urltest': [key: 'url' | 'interval' | 'tolerance', value: string | number];
   'update-dns-urltest': [key: 'enabled' | 'url' | 'interval' | 'tolerance', value: boolean | string | number];
@@ -134,13 +141,6 @@ const emit = defineEmits<{
   'update-manual-selector-keyword': [value: string];
 }>();
 
-const regionLabels: Record<RegionCode, string> = {
-  HK: '🇭🇰 HK',
-  TW: '🇹🇼 TW',
-  SG: '🇸🇬 SG',
-  JP: '🇯🇵 JP',
-  US: '🇺🇸 US'
-};
 
 function inputValue(event: Event) {
   return (event.target as HTMLInputElement | HTMLTextAreaElement)?.value || '';
@@ -148,10 +148,13 @@ function inputValue(event: Event) {
 
 function emitText(eventName: 'update-keyword' | 'update-setting' | 'update-urltest', key: string, event: Event) {
   const value = inputValue(event);
-  if (eventName === 'update-keyword') emit('update-keyword', key as RegionCode, value);
+  if (eventName === 'update-keyword') emit('update-keyword', key, value);
   else if (eventName === 'update-setting') emit('update-setting', key as 'banned_pattern' | 'subscription_user_agent', value);
   else emit('update-urltest', key as 'url' | 'interval', value);
 }
+
+function emitRegion(id: string, key: 'name' | 'emoji', event: Event) { emit('update-region', id, key, inputValue(event)); }
+function emitRegionEnabled(id: string, event: Event) { emit('update-region', id, 'enabled', (event.target as HTMLInputElement).checked); }
 
 function emitNumber(eventName: 'update-setting' | 'update-urltest', key: string, event: Event) {
   const value = Number(inputValue(event));
