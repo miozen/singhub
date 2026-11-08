@@ -14,7 +14,7 @@
           <div class="section-title">
             <h4>订阅拉取与清洗</h4>
           </div>
-          <div class="settings-form">
+          <div class="settings-form subscription-fetch">
             <label>
               <span>过滤正则</span>
               <input :value="settings.banned_pattern" @input="emitText('update-setting', 'banned_pattern', $event)" />

@@ -317,7 +317,7 @@ const {
   deletingId: deletingSubscriptionId,
   refreshList: refreshSubscriptionList,
   openCreate: openCreateSubscriptionBase,
-  openEdit: openEditSubscription,
+  openEdit: openEditSubscriptionBase,
   closeModal: closeSubscriptionModal,
   save: saveSubscription,
   remove: deleteSubscriptionItem,
@@ -395,7 +395,15 @@ const {
   save: saveGenerationSettings
 } = settingsManager;
 
-const openCreateSubscription = () => openCreateSubscriptionBase(generationSettings.value.regions.filter((region) => region.enabled).map((region) => region.id));
+const openCreateSubscription = async () => {
+  if (!(await refreshGenerationSettings())) return;
+  openCreateSubscriptionBase(generationSettings.value.regions.filter((region) => region.enabled).map((region) => region.id));
+};
+
+const openEditSubscription = async (subscription: Parameters<typeof openEditSubscriptionBase>[0]) => {
+  if (!(await refreshGenerationSettings())) return;
+  openEditSubscriptionBase(subscription);
+};
 
 const openCreateClient = async () => {
   if (!templates.value.length) await refreshList({ autoLoadFirst: false });
@@ -637,6 +645,8 @@ nav button.active { box-shadow: inset 3px 0 var(--cyan); }
 
 .settings-section { display: grid; gap: 12px; padding: 14px; }
 .settings-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.settings-form.subscription-fetch { grid-template-columns: minmax(280px, 1fr) minmax(150px, 200px) minmax(120px, 150px) minmax(130px, 160px); }
+.settings-form.subscription-fetch label { min-width: 0; }
 .settings-form.compact { grid-template-columns: minmax(240px, 1fr) repeat(2, minmax(120px, 180px)); }
 .keyword-rows { display: grid; gap: 8px; }
 .region-row { display: grid; grid-template-columns: 80px 52px 110px minmax(180px, 1fr) auto auto; gap: 8px; align-items: center; }
@@ -685,9 +695,12 @@ nav button.active { box-shadow: inset 3px 0 var(--cyan); }
   .panel-editor { min-height: 680px; }
   .editor-toolbar { grid-template-columns: minmax(140px, 190px) minmax(150px, 210px) minmax(320px, 1fr); }
   .settings-form.compact { grid-template-columns: 1fr; }
+  .settings-form.subscription-fetch { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .settings-form.subscription-fetch label:first-child { grid-column: 1 / -1; }
   .keyword-rows label { grid-template-columns: 1fr; gap: 6px; }
 }
 @media (max-width: 760px) {
+  .settings-form.subscription-fetch { grid-template-columns: 1fr; }
   .auth-shell { grid-template-columns: 1fr; gap: 28px; padding: 24px; justify-items: stretch; }
   .auth-copy h1 { font-size: 40px; }
   .app-shell { display: block; }

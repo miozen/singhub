@@ -52,8 +52,10 @@ export function useGenerationSettingsManager(hooks: Hooks = {}) {
     loading.value = true;
     try {
       applySettings(await fetchGenerationSettings());
+      return true;
     } catch (error) {
       hooks.handleRequestError?.(error, '加载系统设置失败');
+      return false;
     } finally {
       loading.value = false;
     }
