@@ -427,7 +427,7 @@ app.get('/sub/client/:token', async (c) => {
         steps: error.diagnostics.steps,
         error: error.message
       });
-      return c.text(`Generation Failed: ${error.message}`, 502);
+      return c.text('Generation Failed', 502);
     }
     await saveGenerationRun(c.env.SINGBOX_DB, {
       client_profile_id: profile.id,

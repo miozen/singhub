@@ -1,4 +1,5 @@
 import { getApiBase, getAuthToken, request } from './client';
+import { ApiRequestError } from './errors';
 import type { ClientProfilePayload, ClientProfileRecord, GenerationRunRecord, GenerationTestResult } from '@shared/types';
 
 export async function fetchClientProfileList() {
@@ -47,7 +48,17 @@ export async function testClientProfileGeneration(id: string) {
   const token = getAuthToken();
   if (token) headers.set('Authorization', `Bearer ${token}`);
 
-  const res = await fetch(`${getApiBase()}/api/client-profiles/${id}/generate/test`, { method: 'POST', headers });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30000);
+  let res: Response;
+  try {
+    res = await fetch(`${getApiBase()}/api/client-profiles/${id}/generate/test`, { method: 'POST', headers, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+  if (res.status === 401 || res.status === 403) {
+    throw new ApiRequestError({ status: res.status, message: `请求失败 (${res.status})`, details: '' });
+  }
   const payload = await res.json().catch(() => ({
     success: false,
     error: `请求失败 (${res.status})`,

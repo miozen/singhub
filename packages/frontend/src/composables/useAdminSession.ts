@@ -35,7 +35,7 @@ export function useAdminSession(hooks: SessionHooks = {}) {
       setAuthToken(data.token);
       isAuthed.value = true;
       password.value = '';
-      await hooks.onLoginSuccess?.();
+      try { await hooks.onLoginSuccess?.(); } catch { /* 登录后预加载失败不应回滚已成功的登录态 */ }
       hooks.notify?.('登录成功', 'success');
       return true;
     } catch (error) {

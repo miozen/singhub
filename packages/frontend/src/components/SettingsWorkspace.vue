@@ -157,7 +157,10 @@ function emitRegion(id: string, key: 'name' | 'emoji', event: Event) { emit('upd
 function emitRegionEnabled(id: string, event: Event) { emit('update-region', id, 'enabled', (event.target as HTMLInputElement).checked); }
 
 function emitNumber(eventName: 'update-setting' | 'update-urltest', key: string, event: Event) {
-  const value = Number(inputValue(event));
+  const raw = inputValue(event).trim();
+  if (raw === '') return;
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return;
   if (eventName === 'update-setting') emit('update-setting', key as 'fetch_timeout_ms' | 'max_subscription_bytes', value);
   else emit('update-urltest', key as 'tolerance', value);
 }

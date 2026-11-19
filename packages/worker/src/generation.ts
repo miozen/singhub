@@ -97,7 +97,7 @@ function countRegions(nodes: NodeLike[], allowedRegions: string[], settings: Gen
     const matched = activeRegions.some((region) => {
       if (allowedRegions.length && !allowedRegions.includes(region.id)) return false;
       const hit = region.keywords.some((keyword) => tag.includes(String(keyword).toUpperCase()));
-      if (hit) regions[region] += 1;
+      if (hit) regions[region.id] += 1;
       return hit;
     });
     if (!matched) unmatched += 1;

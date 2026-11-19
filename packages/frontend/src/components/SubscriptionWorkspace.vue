@@ -174,7 +174,7 @@
           <button type="button" class="ghost" :disabled="testingDraft || saving" @click="$emit('test-draft')">
             {{ testingDraft ? '测试中...' : '测试订阅源' }}
           </button>
-          <button class="primary" :disabled="saving">
+          <button class="primary" :disabled="saving || Boolean(form.dns?.enabled && dnsMode === 'json' && dnsJsonError)">
             {{ saving ? '保存中...' : '保存' }}
           </button>
         </div>
@@ -258,6 +258,7 @@ function switchDnsMode() {
     dnsMode.value = 'json';
   } else {
     dnsMode.value = 'form';
+    dnsJsonError.value = '';
   }
 }
 
