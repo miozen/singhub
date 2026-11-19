@@ -674,6 +674,12 @@ nav button.active { box-shadow: inset 3px 0 var(--cyan); }
 .modal-actions { grid-template-columns: 1fr 1fr; }
 .subscription-modal fieldset { margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: 8px; display: flex; flex-wrap: wrap; gap: 10px 16px; }
 .subscription-modal legend { color: #b5c2d2; font-weight: 700; padding: 0 6px; }
+.subscription-modal fieldset .dns-head,
+.subscription-modal fieldset .dns-form-fields,
+.subscription-modal fieldset .dns-json-fields { flex: 1 1 100%; min-width: 0; }
+.subscription-modal .dns-form-fields { display: grid; gap: 0; }
+.subscription-modal .dns-form-fields label { margin: 8px 0; }
+.subscription-modal .dns-json-fields label { margin: 8px 0; }
 .check-row { margin: 0; display: flex; align-items: center; gap: 8px; }
 .check-row input { width: auto; }
 .binding-picker { display: grid; gap: 8px; padding: 10px; }
