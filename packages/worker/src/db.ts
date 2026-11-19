@@ -75,16 +75,14 @@ export function getTemplateVersionById(db: D1Database, templateId: string, versi
 
 export function getSubscriptionList(db: D1Database) {
   return db.prepare(`
-    SELECT id, name, url_encrypted, enabled, allowed_regions_json, dns_json, created_at, updated_at
-    FROM subscriptions
+    SELECT * FROM subscriptions
     ORDER BY created_at DESC, id DESC
   `).all<SubscriptionRow>();
 }
 
 export function getSubscriptionById(db: D1Database, id: string) {
   return db.prepare(`
-    SELECT id, name, url_encrypted, enabled, allowed_regions_json, dns_json, created_at, updated_at
-    FROM subscriptions
+    SELECT * FROM subscriptions
     WHERE id = ?
   `).bind(id).first<SubscriptionRow>();
 }

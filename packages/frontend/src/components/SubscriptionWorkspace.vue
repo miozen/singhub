@@ -91,48 +91,80 @@
 
         <fieldset>
           <legend>专用 DNS</legend>
-          <label class="check-row">
-            <input :checked="!!form.dns?.enabled" type="checkbox" @change="toggleDnsEnabled" />
-            <span>启用该订阅源的专用 DNS</span>
-          </label>
+          <div class="dns-head" style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
+            <label class="check-row">
+              <input :checked="!!form.dns?.enabled" type="checkbox" @change="toggleDnsEnabled" />
+              <span>启用该订阅源的专用 DNS</span>
+            </label>
+            <button
+              v-if="form.dns?.enabled"
+              type="button"
+              class="ghost"
+              @click="switchDnsMode"
+            >{{ dnsMode === 'form' ? '高级 JSON 模式' : '切换到表单模式' }}</button>
+          </div>
           <template v-if="form.dns?.enabled">
-            <label>
-              <span>协议类型</span>
-              <select v-model="form.dns.type">
-                <option value="https">DoH (HTTPS)</option>
-                <option value="tls">DoT (TLS)</option>
-                <option value="udp">UDP</option>
-                <option value="tcp">TCP</option>
-                <option value="quic">DoQ (QUIC)</option>
-                <option value="h3">HTTP/3</option>
-              </select>
-            </label>
-            <label>
-              <span>DNS 服务器地址</span>
-              <input v-model.trim="form.dns.server" placeholder="1.1.1.1" />
-            </label>
-            <label>
-              <span>端口 (可选)</span>
-              <input v-model.number="form.dns.server_port" type="number" placeholder="443" />
-            </label>
-            <label>
-              <span>请求路径 (DoH/h3 可选)</span>
-              <input v-model.trim="form.dns.path" placeholder="/dns-query" />
-            </label>
-            <label>
-              <span>出站标签 Detour (可选)</span>
-              <input v-model.trim="form.dns.detour" placeholder="留空为直连" />
-            </label>
-            <label>
-              <span>解析策略 (可选)</span>
-              <select v-model="form.dns.strategy">
-                <option value="">默认</option>
-                <option value="prefer_ipv4">prefer_ipv4</option>
-                <option value="prefer_ipv6">prefer_ipv6</option>
-                <option value="ipv4_only">ipv4_only</option>
-                <option value="ipv6_only">ipv6_only</option>
-              </select>
-            </label>
+            <div v-if="dnsMode === 'form'" class="dns-form-fields">
+              <label>
+                <span>DNS 标签 Tag (可选)</span>
+                <input v-model.trim="form.dns.tag" placeholder="留空自动生成 dns-src-{id}" />
+              </label>
+              <label>
+                <span>协议类型</span>
+                <select v-model="form.dns.type">
+                  <option value="https">DoH (HTTPS)</option>
+                  <option value="tls">DoT (TLS)</option>
+                  <option value="udp">UDP</option>
+                  <option value="tcp">TCP</option>
+                  <option value="quic">DoQ (QUIC)</option>
+                  <option value="h3">HTTP/3</option>
+                </select>
+              </label>
+              <label>
+                <span>DNS 服务器地址</span>
+                <input v-model.trim="form.dns.server" placeholder="1.1.1.1" />
+              </label>
+              <label>
+                <span>端口 (可选)</span>
+                <input v-model.number="form.dns.server_port" type="number" placeholder="443" />
+              </label>
+              <label>
+                <span>请求路径 (DoH/h3 可选)</span>
+                <input v-model.trim="form.dns.path" placeholder="/dns-query" />
+              </label>
+              <label>
+                <span>出站标签 Detour (可选)</span>
+                <input v-model.trim="form.dns.detour" placeholder="留空为直连" />
+              </label>
+              <label>
+                <span>前置解析器 Domain Resolver (可选)</span>
+                <input v-model.trim="form.dns.domain_resolver" placeholder="解析此 DNS 自身域名的前置 DNS tag" />
+              </label>
+              <label>
+                <span>解析策略 (可选)</span>
+                <select v-model="form.dns.strategy">
+                  <option value="">默认</option>
+                  <option value="prefer_ipv4">prefer_ipv4</option>
+                  <option value="prefer_ipv6">prefer_ipv6</option>
+                  <option value="ipv4_only">ipv4_only</option>
+                  <option value="ipv6_only">ipv6_only</option>
+                </select>
+              </label>
+            </div>
+            <div v-else class="dns-json-fields">
+              <label>
+                <span>高级 JSON 配置</span>
+                <textarea
+                  v-model="dnsJsonText"
+                  rows="11"
+                  spellcheck="false"
+                  style="width: 100%; box-sizing: border-box; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; resize: vertical;"
+                  placeholder='{\n  "type": "https",\n  "server": "doh.example.com"\n}'
+                ></textarea>
+              </label>
+              <p v-if="dnsJsonError" class="dns-json-error" style="color: #c0392b; font-size: 12px; margin-top: 0.4rem;">{{ dnsJsonError }}</p>
+              <p class="dns-json-hint" style="color: #6b7280; font-size: 12px; margin-top: 0.4rem; line-height: 1.5;">可直接填写 sing-box DNS server 支持的任意字段（如 client_subnet）。切回表单不会影响表单字段的显示，额外字段也会保留。</p>
+            </div>
           </template>
         </fieldset>
 
@@ -152,6 +184,7 @@
 </template>
 
 <script setup lang="ts">
+import { ref, watch } from 'vue';
 import type { RegionDefinition, SourceDnsConfig, SubscriptionPayload, SubscriptionRecord, SubscriptionTestReport as SubscriptionTestReportData } from '@shared/types';
 import SubscriptionTestReport from './SubscriptionTestReport.vue';
 
@@ -185,24 +218,70 @@ defineEmits<{
   'close-modal': [];
 }>();
 
+type DnsMode = 'form' | 'json';
+const dnsMode = ref<DnsMode>('form');
+const dnsJsonText = ref('');
+const dnsJsonError = ref('');
+
+function defaultDns(): SourceDnsConfig {
+  return {
+    enabled: true,
+    tag: null,
+    type: 'https',
+    server: '',
+    server_port: null,
+    path: null,
+    detour: null,
+    domain_resolver: null,
+    strategy: null,
+    client_subnet: null
+  };
+}
+
 function toggleDnsEnabled() {
   if (props.form.dns?.enabled) {
     props.form.dns = null;
+    dnsMode.value = 'form';
   } else {
-    const dns: SourceDnsConfig = {
-      enabled: true,
-      type: 'https',
-      server: '',
-      server_port: null,
-      path: null,
-      detour: null,
-      domain_resolver: null,
-      strategy: null,
-      client_subnet: null
-    };
-    props.form.dns = dns;
+    props.form.dns = defaultDns();
+    dnsMode.value = 'form';
+  }
+  dnsJsonError.value = '';
+}
+
+// 进入 JSON 模式时，把当前完整 dns 对象序列化（去掉 enabled，由开关单独控制）
+function switchDnsMode() {
+  if (dnsMode.value === 'form') {
+    dnsJsonError.value = '';
+    const { enabled: _enabled, ...rest } = props.form.dns || defaultDns();
+    dnsJsonText.value = JSON.stringify(rest, null, 2);
+    dnsMode.value = 'json';
+  } else {
+    dnsMode.value = 'form';
   }
 }
+
+// 每次打开弹窗时回到表单模式，避免上一次编辑残留的 JSON 状态
+watch(() => props.modalOpen, (open) => {
+  if (open) {
+    dnsMode.value = 'form';
+    dnsJsonError.value = '';
+  }
+});
+
+// JSON 编辑时同步回 form.dns：先解析，再合并到默认结构。
+// 合并（而非替换）保证：JSON 里缺失的表单字段有默认值，JSON 里额外的字段被原样保留。
+watch(dnsJsonText, (text) => {
+  if (dnsMode.value !== 'json') return;
+  try {
+    const parsed = text.trim() ? JSON.parse(text) : {};
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('必须是 JSON 对象');
+    dnsJsonError.value = '';
+    props.form.dns = { ...defaultDns(), ...parsed, enabled: true } as SourceDnsConfig;
+  } catch (err) {
+    dnsJsonError.value = `JSON 格式有误：${err instanceof Error ? err.message : '解析失败'}`;
+  }
+});
 
 function maskUrl(value: string) {
   try {

@@ -43,24 +43,26 @@ async function ensureSubscriptionTable(db: D1Database) {
   const existing = await db.prepare(
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'subscriptions'"
   ).first<{ name: string }>();
-  if (existing) return;
-
-  await db.prepare(`
-    CREATE TABLE IF NOT EXISTS subscriptions (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      url_encrypted TEXT NOT NULL,
-      enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
-      allowed_regions_json TEXT NOT NULL DEFAULT '[]',
-      dns_json TEXT DEFAULT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `).run();
-  await db.prepare(`
-    CREATE INDEX IF NOT EXISTS idx_subscriptions_created_at
-    ON subscriptions(created_at DESC)
-  `).run();
+  if (!existing) {
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS subscriptions (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        url_encrypted TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+        allowed_regions_json TEXT NOT NULL DEFAULT '[]',
+        dns_json TEXT DEFAULT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run();
+    await db.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_subscriptions_created_at
+      ON subscriptions(created_at DESC)
+    `).run();
+    return;
+  }
+  // Existing deployments predate dns_json; backfill the column regardless of create path.
   try {
     await db.prepare("ALTER TABLE subscriptions ADD COLUMN dns_json TEXT DEFAULT NULL").run();
   } catch {
