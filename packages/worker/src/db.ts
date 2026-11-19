@@ -22,6 +22,7 @@ export type SubscriptionRow = {
   url_encrypted: string;
   enabled: number;
   allowed_regions_json: string;
+  dns_json?: string | null;
   created_at?: string;
   updated_at?: string;
 };
@@ -74,7 +75,7 @@ export function getTemplateVersionById(db: D1Database, templateId: string, versi
 
 export function getSubscriptionList(db: D1Database) {
   return db.prepare(`
-    SELECT id, name, url_encrypted, enabled, allowed_regions_json, created_at, updated_at
+    SELECT id, name, url_encrypted, enabled, allowed_regions_json, dns_json, created_at, updated_at
     FROM subscriptions
     ORDER BY created_at DESC, id DESC
   `).all<SubscriptionRow>();
@@ -82,7 +83,7 @@ export function getSubscriptionList(db: D1Database) {
 
 export function getSubscriptionById(db: D1Database, id: string) {
   return db.prepare(`
-    SELECT id, name, url_encrypted, enabled, allowed_regions_json, created_at, updated_at
+    SELECT id, name, url_encrypted, enabled, allowed_regions_json, dns_json, created_at, updated_at
     FROM subscriptions
     WHERE id = ?
   `).bind(id).first<SubscriptionRow>();

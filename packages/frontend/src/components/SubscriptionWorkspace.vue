@@ -89,6 +89,53 @@
           </label>
         </fieldset>
 
+        <fieldset>
+          <legend>专用 DNS</legend>
+          <label class="check-row">
+            <input :checked="!!form.dns?.enabled" type="checkbox" @change="toggleDnsEnabled" />
+            <span>启用该订阅源的专用 DNS</span>
+          </label>
+          <template v-if="form.dns?.enabled">
+            <label>
+              <span>协议类型</span>
+              <select v-model="form.dns.type">
+                <option value="https">DoH (HTTPS)</option>
+                <option value="tls">DoT (TLS)</option>
+                <option value="udp">UDP</option>
+                <option value="tcp">TCP</option>
+                <option value="quic">DoQ (QUIC)</option>
+                <option value="h3">HTTP/3</option>
+              </select>
+            </label>
+            <label>
+              <span>DNS 服务器地址</span>
+              <input v-model.trim="form.dns.server" placeholder="1.1.1.1" />
+            </label>
+            <label>
+              <span>端口 (可选)</span>
+              <input v-model.number="form.dns.server_port" type="number" placeholder="443" />
+            </label>
+            <label>
+              <span>请求路径 (DoH/h3 可选)</span>
+              <input v-model.trim="form.dns.path" placeholder="/dns-query" />
+            </label>
+            <label>
+              <span>出站标签 Detour (可选)</span>
+              <input v-model.trim="form.dns.detour" placeholder="留空为直连" />
+            </label>
+            <label>
+              <span>解析策略 (可选)</span>
+              <select v-model="form.dns.strategy">
+                <option value="">默认</option>
+                <option value="prefer_ipv4">prefer_ipv4</option>
+                <option value="prefer_ipv6">prefer_ipv6</option>
+                <option value="ipv4_only">ipv4_only</option>
+                <option value="ipv6_only">ipv6_only</option>
+              </select>
+            </label>
+          </template>
+        </fieldset>
+
         <SubscriptionTestReport v-if="draftReport" :report="draftReport" :regions="regions.map((region) => region.id)" />
 
         <div class="modal-actions">
@@ -105,13 +152,13 @@
 </template>
 
 <script setup lang="ts">
-import type { RegionDefinition, SubscriptionPayload, SubscriptionRecord, SubscriptionTestReport as SubscriptionTestReportData } from '@shared/types';
+import type { RegionDefinition, SourceDnsConfig, SubscriptionPayload, SubscriptionRecord, SubscriptionTestReport as SubscriptionTestReportData } from '@shared/types';
 import SubscriptionTestReport from './SubscriptionTestReport.vue';
 
 type SavedReport = SubscriptionTestReportData & { tested_at: string; expanded: boolean };
 type SubscriptionForm = SubscriptionPayload & { id?: string };
 
-defineProps<{
+const props = defineProps<{
   subscriptions: SubscriptionRecord[];
   regions: RegionDefinition[];
   loading: boolean;
@@ -137,6 +184,25 @@ defineEmits<{
   save: [];
   'close-modal': [];
 }>();
+
+function toggleDnsEnabled() {
+  if (props.form.dns?.enabled) {
+    props.form.dns = null;
+  } else {
+    const dns: SourceDnsConfig = {
+      enabled: true,
+      type: 'https',
+      server: '',
+      server_port: null,
+      path: null,
+      detour: null,
+      domain_resolver: null,
+      strategy: null,
+      client_subnet: null
+    };
+    props.form.dns = dns;
+  }
+}
 
 function maskUrl(value: string) {
   try {

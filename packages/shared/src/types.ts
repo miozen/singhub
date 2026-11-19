@@ -20,12 +20,26 @@ export type TemplateVersionRecord = {
 
 export type RegionDefinition = { id: string; name: string; emoji: string; enabled: boolean; keywords: string[] };
 
+export type SourceDnsConfig = {
+  enabled: boolean;
+  tag?: string | null;
+  type: string;
+  server: string;
+  server_port?: number | null;
+  path?: string | null;
+  detour?: string | null;
+  domain_resolver?: string | null;
+  strategy?: string | null;
+  client_subnet?: string | null;
+};
+
 export type SubscriptionRecord = {
   id: string;
   name: string;
   url: string;
   enabled: boolean;
   allowed_regions: string[];
+  dns?: SourceDnsConfig | null;
   created_at?: string;
   updated_at?: string;
 };
@@ -35,6 +49,7 @@ export type SubscriptionPayload = {
   url: string;
   enabled?: boolean;
   allowed_regions: string[];
+  dns?: SourceDnsConfig | null;
 };
 
 export type SubscriptionTestReport = {

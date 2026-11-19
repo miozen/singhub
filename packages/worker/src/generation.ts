@@ -77,6 +77,8 @@ function normalizeNodes(payload: any, settings: GenerationSettings) {
     const next = clone(node);
     if (next?.tls?.utls?.fingerprint !== undefined) next.tls.utls.fingerprint = String(next.tls.utls.fingerprint);
     if (next?.tls?.reality?.short_id !== undefined) next.tls.reality.short_id = String(next.tls.reality.short_id);
+    delete next.domain_resolver;
+    delete next.domain_strategy;
     return next;
   }).filter((node: NodeLike) => {
     const tag = String(node?.tag || '');
@@ -152,13 +154,67 @@ function buildManualSelectorGroup(nodes: NodeLike[], settings: GenerationSetting
   };
 }
 
+function applySourceDedicatedDns(
+  config: Record<string, any>,
+  subscriptions: SubscriptionRecord[],
+  nodes: NodeLike[]
+): { generated: number; assigned: number } {
+  if (!config.dns || typeof config.dns !== 'object') return { generated: 0, assigned: 0 };
+  if (!Array.isArray(config.dns.servers)) config.dns.servers = [];
+
+  const existingTags = new Set(
+    config.dns.servers.filter((s: any) => s?.tag).map((s: any) => s.tag)
+  );
+  const sourceDnsTagMap: Record<string, string> = {};
+  let generated = 0;
+
+  for (const sub of subscriptions) {
+    if (!sub.enabled || !sub.dns?.enabled || !sub.dns.server) continue;
+    const tag = sub.dns.tag || `dns-src-${sub.id}`;
+    if (existingTags.has(tag)) throw new Error(`dns_tag_conflict:${tag}`);
+
+    const entry: Record<string, any> = {
+      tag,
+      type: sub.dns.type || 'https',
+      server: sub.dns.server
+    };
+    if (sub.dns.server_port) entry.server_port = sub.dns.server_port;
+    if (sub.dns.path) entry.path = sub.dns.path;
+    if (sub.dns.detour) entry.detour = sub.dns.detour;
+    if (sub.dns.domain_resolver) entry.domain_resolver = sub.dns.domain_resolver;
+    if (sub.dns.strategy) entry.strategy = sub.dns.strategy;
+    if (sub.dns.client_subnet) entry.client_subnet = sub.dns.client_subnet;
+
+    config.dns.servers.push(entry);
+    existingTags.add(tag);
+    sourceDnsTagMap[sub.id] = tag;
+    generated++;
+  }
+
+  let assigned = 0;
+  for (const node of nodes) {
+    const srcId = node.x_source_id;
+    if (srcId && sourceDnsTagMap[srcId]) {
+      node.domain_resolver = sourceDnsTagMap[srcId];
+      assigned++;
+    }
+  }
+  return { generated, assigned };
+}
+
 function cleanReferences(config: any) {
   const valid = new Set((config.outbounds || []).map((outbound: NodeLike) => outbound.tag));
   for (const outbound of config.outbounds || []) {
     if (Array.isArray(outbound.outbounds)) outbound.outbounds = outbound.outbounds.filter((tag: string) => valid.has(tag));
   }
+  const dnsTags = new Set((config.dns?.servers || []).map((s: any) => s?.tag).filter(Boolean));
   for (const server of config.dns?.servers || []) {
     if (server.detour && !valid.has(server.detour)) delete server.detour;
+    if (server.domain_resolver && !dnsTags.has(server.domain_resolver)) delete server.domain_resolver;
+  }
+  for (const outbound of config.outbounds || []) {
+    if (outbound.domain_resolver && !dnsTags.has(outbound.domain_resolver)) delete outbound.domain_resolver;
+    delete outbound.x_source_id;
   }
 }
 
@@ -382,7 +438,9 @@ export async function generateClientConfig(db: D1Database, profile: ClientProfil
   }));
   const cleanedCount = sources.reduce((total, source) => total + source.nodes.length, 0);
   const seen = new Set<string>();
-  const nodes = sources.flatMap((source) => source.nodes).filter((node) => !seen.has(node.tag) && seen.add(node.tag));
+  const nodes = sources.flatMap((source) =>
+    source.nodes.map((node) => ({ ...node, x_source_id: source.id }))
+  ).filter((node) => !seen.has(node.tag) && seen.add(node.tag));
   if (subscriptions.length && !nodes.length) {
     addStep('节点清洗', 'error', '没有可用于生成配置的有效节点。');
     abort(failedCount === subscriptions.length ? 'all_subscriptions_failed' : 'no_valid_nodes');
@@ -442,6 +500,22 @@ export async function generateClientConfig(db: D1Database, profile: ClientProfil
 
   const selectorCount = template.outbounds.filter((outbound: NodeLike) => outbound.type === 'selector').length;
   const directTag = template.outbounds.find((outbound: NodeLike) => outbound.type === 'direct')?.tag || '🎯 全球直连';
+
+  let dnsInjection: { generated: number; assigned: number } = { generated: 0, assigned: 0 };
+  try {
+    dnsInjection = applySourceDedicatedDns(template, subscriptions, nodes);
+    if (dnsInjection.generated) {
+      addStep('DNS 注入', 'success',
+        `生成 ${dnsInjection.generated} 个专用 DNS server，绑定 ${dnsInjection.assigned} 个节点。`,
+        dnsInjection);
+    } else {
+      addStep('DNS 注入', 'success', '无订阅源配置专用 DNS，跳过注入。', dnsInjection);
+    }
+  } catch (error) {
+    addStep('DNS 注入', 'error', `DNS 注入失败：${error instanceof Error ? error.message : 'unknown'}`);
+    abort(error instanceof Error ? error.message : 'dns_injection_failed');
+  }
+
   let output: Record<string, any>;
   try {
     output = injectTemplate(template, nodes, groups, byRegion, directTag, settings, dnsGroup, manualSelectorGroup);
@@ -469,6 +543,8 @@ export async function generateClientConfig(db: D1Database, profile: ClientProfil
       dns_group_nodes: dnsGroup?.outbounds.length || 0,
       manual_selector_nodes: manualSelectorGroup?.outbounds.length || 0,
       dns_detours_adjusted: dnsDetourCount,
+      dns_injection_generated: dnsInjection.generated,
+      dns_injection_assigned: dnsInjection.assigned,
       selectors: selectorCount,
       outbounds: output.outbounds.length,
       warnings: steps.filter((step) => step.status === 'warning').length,

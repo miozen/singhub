@@ -52,6 +52,7 @@ async function ensureSubscriptionTable(db: D1Database) {
       url_encrypted TEXT NOT NULL,
       enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
       allowed_regions_json TEXT NOT NULL DEFAULT '[]',
+      dns_json TEXT DEFAULT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
@@ -60,6 +61,11 @@ async function ensureSubscriptionTable(db: D1Database) {
     CREATE INDEX IF NOT EXISTS idx_subscriptions_created_at
     ON subscriptions(created_at DESC)
   `).run();
+  try {
+    await db.prepare("ALTER TABLE subscriptions ADD COLUMN dns_json TEXT DEFAULT NULL").run();
+  } catch {
+    // column already exists
+  }
 }
 
 function parseRegions(raw: string) {
@@ -70,6 +76,16 @@ function parseRegions(raw: string) {
   }
 }
 
+function parseDnsConfig(raw?: string | null) {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 async function exposeRow(row: SubscriptionRow, secret: string) {
   return {
     id: row.id,
@@ -77,6 +93,7 @@ async function exposeRow(row: SubscriptionRow, secret: string) {
     url: await decryptSubscriptionUrl(row.url_encrypted, secret),
     enabled: Boolean(row.enabled),
     allowed_regions: parseRegions(row.allowed_regions_json),
+    dns: parseDnsConfig(row.dns_json),
     created_at: row.created_at,
     updated_at: row.updated_at
   };
@@ -100,10 +117,11 @@ export async function createSubscription(db: D1Database, payload: SubscriptionPa
   const regions = cleanRegions(payload.allowed_regions);
   const enabled = payload.enabled !== false;
   const urlEncrypted = await encryptSubscriptionUrl(payload.url, secret);
+  const dnsJson = payload.dns ? JSON.stringify(payload.dns) : null;
   await db.prepare(`
-    INSERT INTO subscriptions (id, name, url_encrypted, enabled, allowed_regions_json)
-    VALUES (?, ?, ?, ?, ?)
-  `).bind(id, payload.name.trim(), urlEncrypted, enabled ? 1 : 0, JSON.stringify(regions)).run();
+    INSERT INTO subscriptions (id, name, url_encrypted, enabled, allowed_regions_json, dns_json)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).bind(id, payload.name.trim(), urlEncrypted, enabled ? 1 : 0, JSON.stringify(regions), dnsJson).run();
   return { id };
 }
 
@@ -114,11 +132,12 @@ export async function updateSubscription(db: D1Database, id: string, payload: Su
   const regions = cleanRegions(payload.allowed_regions);
   const enabled = payload.enabled !== false;
   const urlEncrypted = await encryptSubscriptionUrl(payload.url, secret);
+  const dnsJson = payload.dns ? JSON.stringify(payload.dns) : null;
   const result = await db.prepare(`
     UPDATE subscriptions
-    SET name = ?, url_encrypted = ?, enabled = ?, allowed_regions_json = ?, updated_at = CURRENT_TIMESTAMP
+    SET name = ?, url_encrypted = ?, enabled = ?, allowed_regions_json = ?, dns_json = ?, updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
-  `).bind(payload.name.trim(), urlEncrypted, enabled ? 1 : 0, JSON.stringify(regions), id).run();
+  `).bind(payload.name.trim(), urlEncrypted, enabled ? 1 : 0, JSON.stringify(regions), dnsJson, id).run();
   return result.meta.changes ? readSubscription(db, id, secret) : null;
 }
 

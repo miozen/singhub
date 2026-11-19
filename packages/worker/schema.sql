@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS subscriptions (
   url_encrypted TEXT NOT NULL,
   enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
   allowed_regions_json TEXT NOT NULL DEFAULT '[]',
+  dns_json TEXT DEFAULT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );

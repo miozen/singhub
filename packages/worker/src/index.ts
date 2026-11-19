@@ -65,6 +65,13 @@ function validateSubscriptionPayload(body: any) {
   if (body.enabled !== undefined && typeof body.enabled !== 'boolean') return 'Enabled must be boolean';
   const regions = cleanRegions(body.allowed_regions);
   if ((body.enabled ?? true) && !regions.length) return 'Enabled subscription requires at least one allowed region';
+  if (body.dns !== undefined && body.dns !== null) {
+    if (typeof body.dns !== 'object' || Array.isArray(body.dns)) return 'DNS config must be an object';
+    if (body.dns.enabled === true) {
+      if (!body.dns.server || typeof body.dns.server !== 'string') return 'DNS server is required when enabled';
+      if (!body.dns.type || typeof body.dns.type !== 'string') return 'DNS type is required when enabled';
+    }
+  }
   return '';
 }
 
@@ -175,7 +182,8 @@ app.post('/api/subscriptions', requireAdminAuth, async (c) => {
     name: body.name,
     url: body.url,
     enabled: body.enabled ?? true,
-    allowed_regions: cleanRegions(body.allowed_regions) as any
+    allowed_regions: cleanRegions(body.allowed_regions) as any,
+    dns: body.dns ?? null
   }, c.env.TOKEN_SECRET);
   return c.json(result, 201);
 });
@@ -188,7 +196,8 @@ app.put('/api/subscriptions/:id', requireAdminAuth, async (c) => {
     name: body.name,
     url: body.url,
     enabled: body.enabled ?? true,
-    allowed_regions: cleanRegions(body.allowed_regions) as any
+    allowed_regions: cleanRegions(body.allowed_regions) as any,
+    dns: body.dns ?? null
   }, c.env.TOKEN_SECRET);
   if (!updated) return jsonError('Not found', 404, 'NOT_FOUND');
   return c.json(updated);

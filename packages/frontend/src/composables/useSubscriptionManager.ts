@@ -23,7 +23,8 @@ const emptyForm = (allowedRegions = DEFAULT_REGIONS): SubscriptionPayload & { id
   name: '',
   url: '',
   enabled: true,
-  allowed_regions: [...allowedRegions]
+  allowed_regions: [...allowedRegions],
+  dns: null
 });
 
 export function useSubscriptionManager(hooks: Hooks = {}) {
@@ -97,7 +98,8 @@ export function useSubscriptionManager(hooks: Hooks = {}) {
         name: form.value.name.trim(),
         url: form.value.url.trim(),
         enabled: form.value.enabled,
-        allowed_regions: [...form.value.allowed_regions]
+        allowed_regions: [...form.value.allowed_regions],
+        dns: form.value.dns ?? null
       };
       if (form.value.id) await updateSubscription(form.value.id, payload);
       else await createSubscription(payload);
